@@ -103,6 +103,7 @@ async function startBot() {
         reconnectAttempts = 0;
         console.log('✅ Bot berhasil terhubung!');
         console.log(`Bot Name: ${config.botName}`);
+        console.log('👀 Menunggu pesan masuk...');
 
         // Kirim pesan ke diri sendiri saat tersambung
         try {
@@ -136,17 +137,30 @@ async function startBot() {
       if (type !== 'notify') return;
 
       for (const msg of messages) {
-        if (!msg.message || msg.key.fromMe) continue;
+        if (!msg || msg.key?.fromMe) continue;
 
-        const from = msg.key.remoteJid;
-        const text = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').trim();
+        const from = msg.key?.remoteJid || 'pengirim tidak diketahui';
+        const message = msg.message;
+        const messageType = message ? Object.keys(message)[0] : 'konten tidak tersedia';
+        const text = message?.conversation
+          || message?.extendedTextMessage?.text
+          || message?.imageMessage?.caption
+          || message?.videoMessage?.caption
+          || message?.documentMessage?.caption
+          || '';
 
-        if (!text) continue;
+        // Tampilkan pesan masuk di terminal, termasuk pesan non-teks.
+        console.log(`📩 Pesan masuk dari ${from} [${messageType}]${text ? `: ${text}` : ''}`);
 
-        console.log(`Pesan dari ${from}: ${text}`);
+        if (!message) continue;
+        const commandText = (message.conversation || message.extendedTextMessage?.text || '').trim();
 
-        if (text.startsWith(config.prefix)) {
-          const handled = await handleCommand(sock, msg, text);
+        if (!commandText) continue;
+
+        console.log(`Pesan dari ${from}: ${commandText}`);
+
+        if (commandText.startsWith(config.prefix)) {
+          const handled = await handleCommand(sock, msg, commandText);
           if (handled) continue;
         }
 
@@ -175,7 +189,7 @@ async function startBot() {
           const mentionedJids = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
           const isMentioned = mentionedJids.some(jid => jid.includes(config.botNumber) || jid === botJid);
 
-          const textLower = text.toLowerCase();
+          const textLower = commandText.toLowerCase();
           const aiName = (settings.aiName || '').toLowerCase();
           const botName = (config.botName || '').toLowerCase();
           const isCalled = (aiName && textLower.includes(aiName)) || (botName && textLower.includes(botName));
@@ -206,7 +220,7 @@ async function startBot() {
         try {
           await sock.sendPresenceUpdate('composing', from);
           const senderJid = msg.key.participant || from;
-          const aiReply = await getAIResponse(text, senderJid, from);
+          const aiReply = await getAIResponse(commandText, senderJid, from);
           const sent = await sock.sendMessage(from, { text: aiReply }, { quoted: msg });
           await sock.sendPresenceUpdate('paused', from);
 
